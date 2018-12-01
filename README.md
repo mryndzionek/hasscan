@@ -6,10 +6,10 @@ Some things turned out to be tricky. Some functions are missing from Haskell [Op
 and were replaced with functions from [friday](http://hackage.haskell.org/package/friday) library.
 
 ![original](images/ticket.JPG)
-![edged](images/ticket_edged.JPG)
-![outline](images/ticket_outline.JPG)
-![flat](images/ticket_flat.JPG)
-![scanned](images/ticket_scanned.JPG)
+![edged](images/ticket_edged.png)
+![outline](images/ticket_outline.png)
+![flat](images/ticket_warped.png)
+![scanned](images/ticket_scanned.png)
 
 License
 -------
