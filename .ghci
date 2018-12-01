@@ -1,0 +1,5 @@
+:set -fwarn-unused-binds -fwarn-unused-imports -fwarn-orphans
+:set -ferror-spans
+:set -i
+:set -isrc
+:load Main
