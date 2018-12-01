@@ -48,15 +48,17 @@ contourAreas c1 c2 = exceptError $ do
   where
     fromItoF p = fmap fromIntegral (fromPoint p :: V2 Int32)
 
-drawCandidates contours info = pureExcept $
+drawCandidates contours src = pureExcept $
   withMatM (h ::: w ::: Z) (Proxy :: Proxy 3) (Proxy :: Proxy Word8) black $ \imgM -> do
     let candidates = V.fromList $ takeWhile ((==4) . length) contours
         rejected = V.fromList $ drop (length candidates) contours
         contour = V.singleton $ V.head candidates
+    matCopyToM imgM (V2 0 0) src Nothing
     drawC (V.init candidates) white 1 imgM
     drawC rejected red 1 imgM
     drawC contour green 2 imgM
     where
+      info = matInfo src
       [h, w] = miShape info
       drawC c cl t i = lift $ drawContours c cl (OutlineContour LineType_8 t) i
 
@@ -93,10 +95,10 @@ process fname = do
        name = encodeString . fst . splitExtension $ decodeString fname
   img :: Mat ('S '[ 'D, 'D]) 'D ('S Word8)
          <- imdecode ImreadUnchanged <$> lift (B.readFile fname) >>= pureExcept . coerceMat
+  resized <- resizeToHeight 500 img
   edged <- pureExcept $ do
-    strElem :: Mat 'D 'D 'D <- getStructuringElement MorphEllipse (Proxy :: Proxy 4) (Proxy :: Proxy 4) >>= coerceMat
-    resizeToHeight 500 img >>=
-      cvtColor bgr gray >>=
+    strElem :: Mat 'D 'D 'D <- getStructuringElement MorphEllipse (Proxy :: Proxy 6) (Proxy :: Proxy 6) >>= coerceMat
+    cvtColor bgr gray  resized >>=
       morpho strElem MorphOpen >>=
       morpho strElem MorphClose >>=
       gaussianBlur (7 :: V2 Int32) 0 0 >>=
@@ -107,8 +109,10 @@ process fname = do
       candidates = V.fromList $ filter ((==4) . length) approx
       contour = V.map (fmap ((ratio *) . fromIntegral) . (\ p -> fromPoint p :: V2 Int32)) (V.head candidates)
   warped <- pureExcept $ fourPointTransform contour img
-  let debug = exceptError $ drawCandidates approx (matInfo edged)
-  lift $ saveImage (name ++ "_candidates.png") debug
+  res :: Mat ('S '[ 'D, 'D]) ('S 3) ('S Word8) <- pureExcept $ coerceMat resized
+  outline <- drawCandidates approx res
+  lift $ saveImage (name ++ "_edged.png") edged
+  lift $ saveImage (name ++ "_outline.png") outline
   lift $ saveImage (name ++ "_warped.png") warped
   scanned <- pureExcept $ do
     strElem :: Mat 'D 'D 'D <- getStructuringElement MorphEllipse (Proxy :: Proxy 1) (Proxy :: Proxy 1) >>= coerceMat
