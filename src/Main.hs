@@ -9,6 +9,7 @@ import           Control.Lens
 import           Control.Monad.Trans
 import qualified Data.ByteString           as B
 import qualified Data.ByteString.Lazy      as Bl
+import           Data.Function             (on)
 import           Data.List                 (sortBy)
 import           Data.Proxy
 import qualified Data.Vector               as V
@@ -31,8 +32,11 @@ import qualified Vision.Image.JuicyPixels  as Vj
 import qualified Vision.Image.Threshold    as Vit
 
 black = pure 0 :: V4 Double
+
 white = pure 255 :: V4 Double
+
 green = V4 0 255 0 0 :: V4 Double
+
 red = V4 0 0 255 0 :: V4 Double
 
 defaultBorder = BorderConstant (toScalar black)
@@ -57,8 +61,8 @@ contourAreas c1 c2 =
 drawCandidates contours src =
   pureExcept $
   withMatM (h ::: w ::: Z) (Proxy :: Proxy 3) (Proxy :: Proxy Word8) black $ \imgM -> do
-    let candidates = V.fromList $ takeWhile ((== 4) . length) contours
-        rejected = V.fromList $ drop (length candidates) contours
+    let candidates = V.takeWhile ((== 4) . length) contours
+        rejected = V.drop (length candidates) contours
         contour = V.singleton $ V.head candidates
     matCopyToM imgM (V2 0 0) src Nothing
     drawC (V.init candidates) white 1 imgM
@@ -71,16 +75,24 @@ drawCandidates contours src =
 
 orderPoints pts =
   let l = V.toList pts
-      srted = sortBy (\p1 p2 -> (p1 ^. _x) `compare` (p2 ^. _x)) l
-      [tl, bl] =
-        sortBy (\p1 p2 -> (p1 ^. _y) `compare` (p2 ^. _y)) $ take 2 srted
+      srted = sortBy (compare `on` (^. _x)) l
+      [tl, bl] = sortBy (compare `on` (^. _y)) $ take 2 srted
       rm = take 2 (reverse srted)
       [tr, br] = map snd $ take 2 $ sortBy compareDistance $ zip (repeat tl) rm
-      compareDistance (a, b) (c, d) =
-        let d1 = L.norm (a - b)
-            d2 = L.norm (c - d)
-         in d1 `compare` d2
+      compareDistance = compare `on` (\(a, b) -> L.norm (a - b))
    in [tl, tr, br, bl]
+
+findSortedContours src = do
+  contours <-
+    thaw src >>= findContours ContourRetrievalList ContourApproximationSimple
+  let approx =
+        sortBy contourAreas $ V.toList $ V.map (toPoly . contourPoints) contours
+  return $ V.fromList approx
+  where
+    toPoly p =
+      exceptError $ do
+        peri <- arcLength p True
+        return $ approxPolyDP p (0.02 * peri) True
 
 fourPointTransform pts src =
   let src_ = orderPoints pts
@@ -123,19 +135,15 @@ process fname = do
         morpho strElem MorphClose >>=
         gaussianBlur (7 :: V2 Int32) 0 0 >>=
         canny 75 100 Nothing CannyNormL1
-  contours <-
-    thaw edged >>= findContours ContourRetrievalList ContourApproximationSimple
+  scs <- findSortedContours edged
   let ratio = ((fromIntegral . head . miShape . matInfo) img / 500) :: CFloat
-      approx =
-        sortBy contourAreas $ V.toList $ V.map (toPoly . contourPoints) contours
-      candidates = V.fromList $ filter ((== 4) . length) approx
       contour =
         V.map
           (fmap ((ratio *) . fromIntegral) . (\p -> fromPoint p :: V2 Int32))
-          (V.head candidates)
+          (V.head $ V.filter ((== 4) . length) scs)
   warped <- pureExcept $ fourPointTransform contour img
   res :: Mat ('S '[ 'D, 'D]) ('S 3) ('S Word8) <- pureExcept $ coerceMat resized
-  outline <- drawCandidates approx res
+  outline <- drawCandidates scs res
   lift $ saveImage (name ++ "_edged.png") edged
   lift $ saveImage (name ++ "_outline.png") outline
   lift $ saveImage (name ++ "_warped.png") warped
@@ -161,10 +169,6 @@ process fname = do
         60
         bintres
     bintres = Vit.BinaryThreshold 0 255
-    toPoly p =
-      exceptError $ do
-        peri <- arcLength p True
-        return $ approxPolyDP p (0.02 * peri) True
 
 main :: IO ()
 main = do
