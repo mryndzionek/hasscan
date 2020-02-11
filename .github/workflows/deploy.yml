@@ -1,0 +1,31 @@
+name: deploy
+
+on:
+  push:
+
+jobs:
+  deploy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Prepare
+      run: |
+        sudo apt-get update
+        sudo apt-get install libopencv-dev
+
+    - uses: actions/checkout@v1
+    - uses: cachix/install-nix-action@v6
+    - run: |
+        $(nix-build --option substituters "https://cache.nixos.org https://static-haskell-nix.cachix.org" \
+                    --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= \
+                    static-haskell-nix.cachix.org-1:Q17HawmAwaM1/BfIxaEDKAxwTOyRVhPG5Ji9K3+FvUU=" \
+                    --no-link -A fullBuildScript)
+
+    - run: |
+        echo "::set-env name=ART_NAME::$(find /nix/store/ | grep 'bin/hasscan' | tail -n 1 | cut -d'/' -f4)"
+        
+    - uses: actions/upload-artifact@v1.0.0
+      with:
+        name: hasscan
+        path: /nix/store/${{env.ART_NAME}}
