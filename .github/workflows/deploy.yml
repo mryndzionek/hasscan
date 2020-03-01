@@ -14,10 +14,19 @@ jobs:
         sudo apt-get update
         sudo apt-get install libopencv-dev
 
+    - name: Free Space
+      run: |
+        sudo swapoff -a
+        sudo rm -f /swapfile
+        sudo apt clean
+        docker rmi $(docker image ls -aq)
+        df -h
+
     - uses: actions/checkout@v1
     - uses: cachix/install-nix-action@v6
     - run: |
-        $(nix-build --option substituters "https://cache.nixos.org https://static-haskell-nix.cachix.org" \
+        $(nix-build --option max-jobs auto --option build-cores 0 \
+                    --option substituters "https://cache.nixos.org https://static-haskell-nix.cachix.org" \
                     --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= \
                     static-haskell-nix.cachix.org-1:Q17HawmAwaM1/BfIxaEDKAxwTOyRVhPG5Ji9K3+FvUU=" \
                     --no-link -A fullBuildScript)
