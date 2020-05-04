@@ -22,8 +22,8 @@ jobs:
         docker rmi $(docker image ls -aq)
         df -h
 
-    - uses: actions/checkout@v1
-    - uses: cachix/install-nix-action@v6
+    - uses: actions/checkout@01aecccf739ca6ff86c0539fbc67a7a5007bbc81
+    - uses: cachix/install-nix-action@ebed63b0a20f20951a06a507ea1a1596bfce35b6
     - run: |
         $(nix-build --option max-jobs auto --option build-cores 0 \
                     --option substituters "https://cache.nixos.org https://static-haskell-nix.cachix.org" \
@@ -34,7 +34,7 @@ jobs:
     - run: |
         echo "::set-env name=ART_NAME::$(find /nix/store/ | grep 'bin/hasscan' | tail -n 1 | cut -d'/' -f4)"
         
-    - uses: actions/upload-artifact@v1.0.0
+    - uses: actions/upload-artifact@e7eefc491732c06d0ebbf4d4f49dcc25b4d2f3a8
       with:
         name: hasscan
         path: /nix/store/${{env.ART_NAME}}
